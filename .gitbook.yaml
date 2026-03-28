@@ -1,0 +1,31 @@
+root: ./
+
+structure:
+  readme: README.md
+  summary: SUMMARY.md
+
+title: Skawr Documentation
+description: Complete business and technical documentation for Skawr marketplace platform
+
+pdf:
+  fontSize: 12
+  paperSize: a4
+  margin:
+    top: 56
+    bottom: 56
+    right: 62
+    left: 62
+
+plugins:
+  - search-plus
+  - advanced-emoji
+  - github
+  - edit-link
+  - copy-code-button
+
+pluginsConfig:
+  github:
+    url: https://github.com/skawr/skawr-docs
+  edit-link:
+    base: https://github.com/skawr/skawr-docs/tree/main
+    label: Edit This Page

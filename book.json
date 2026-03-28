@@ -1,0 +1,49 @@
+{
+  "title": "Skawr Documentation",
+  "description": "Complete business and technical documentation for Skawr marketplace platform",
+  "author": "Skawr Team",
+  "language": "en",
+  "gitbook": ">=3.0.0",
+  "root": "./",
+  "structure": {
+    "readme": "README.md",
+    "summary": "SUMMARY.md"
+  },
+  "plugins": [
+    "search-plus",
+    "advanced-emoji",
+    "github",
+    "edit-link",
+    "copy-code-button",
+    "expandable-chapters",
+    "anchors",
+    "theme-comscore"
+  ],
+  "pluginsConfig": {
+    "github": {
+      "url": "https://github.com/skawr/skawr-docs"
+    },
+    "edit-link": {
+      "base": "https://github.com/skawr/skawr-docs/tree/main",
+      "label": "Edit This Page"
+    },
+    "theme-default": {
+      "showLevel": false
+    }
+  },
+  "pdf": {
+    "fontSize": 12,
+    "paperSize": "a4",
+    "margin": {
+      "top": 56,
+      "bottom": 56,
+      "right": 62,
+      "left": 62
+    }
+  },
+  "variables": {
+    "version": "1.0.0",
+    "company": "Skawr",
+    "website": "https://skawr.com"
+  }
+}

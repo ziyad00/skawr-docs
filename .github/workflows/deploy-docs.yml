@@ -1,0 +1,191 @@
+name: Deploy Skawr Documentation
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '**/*.md'
+      - 'book.json'
+      - '.gitbook.yaml'
+      - 'SUMMARY.md'
+      - '.github/workflows/deploy-docs.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '**/*.md'
+      - 'book.json'
+      - '.gitbook.yaml'
+      - 'SUMMARY.md'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git info
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 🔧 Install GitBook CLI
+        run: |
+          npm install -g gitbook-cli
+          npm install -g swagger-codegen
+
+      - name: 📚 Install GitBook Plugins
+        run: |
+          gitbook install
+        continue-on-error: true  # Some plugins might fail but docs can still build
+
+      - name: 🏗️ Build Documentation
+        run: |
+          echo "Building GitBook documentation..."
+          gitbook build
+
+          # Add build timestamp
+          echo "Built on: $(date)" > _book/build-info.txt
+          echo "Git commit: ${{ github.sha }}" >> _book/build-info.txt
+          echo "Workflow: ${{ github.workflow }}" >> _book/build-info.txt
+
+      - name: 📊 Generate Build Statistics
+        run: |
+          echo "## 📊 Build Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total HTML files:** $(find _book -name '*.html' | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total size:** $(du -sh _book | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build time:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Git commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🧪 Validate HTML
+        run: |
+          # Basic HTML validation - check for broken internal links
+          echo "Validating HTML structure..."
+
+          # Check if main files exist
+          if [ ! -f "_book/index.html" ]; then
+            echo "❌ Missing index.html"
+            exit 1
+          fi
+
+          # Check for common issues
+          if grep -r "404" _book/ || grep -r "File not found" _book/; then
+            echo "⚠️ Potential broken links detected"
+          else
+            echo "✅ Basic validation passed"
+          fi
+
+      - name: 📤 Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_book
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: |
+            📚 Deploy documentation
+
+            Source commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}
+
+            🤖 Generated with GitHub Actions
+
+      - name: 💾 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-build
+          path: _book/
+          retention-days: 30
+
+      - name: 📋 Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = `## 📚 Documentation Preview
+
+            Your documentation changes have been built successfully!
+
+            ### 📊 Build Summary
+            - **Commit:** \`${{ github.sha }}\`
+            - **Build time:** \`$(date)\`
+            - **Status:** ✅ Success
+
+            ### 📥 Download
+            You can download the built documentation from the [workflow artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            ### 🚀 Deploy
+            This will be automatically deployed to GitHub Pages when merged to main.
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Separate job for additional quality checks
+  quality-checks:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: always()
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-build
+          path: _book/
+
+      - name: 🔍 Check Documentation Quality
+        run: |
+          echo "## 🔍 Documentation Quality Report" >> $GITHUB_STEP_SUMMARY
+
+          # Check for placeholder content
+          placeholder_count=$(grep -r "TODO\|FIXME\|placeholder\|Lorem ipsum" _book/ || echo "0")
+          echo "- **Placeholder content:** $(echo "$placeholder_count" | wc -l) instances" >> $GITHUB_STEP_SUMMARY
+
+          # Check for broken internal links (basic check)
+          broken_links=$(grep -r "href.*\.md" _book/ || echo "0")
+          if [ "$broken_links" != "0" ]; then
+            echo "- **⚠️ Potential broken links:** $(echo "$broken_links" | wc -l) found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **✅ Internal links:** All appear valid" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check documentation coverage
+          total_pages=$(find _book -name "*.html" | wc -l)
+          echo "- **Total pages:** $total_pages" >> $GITHUB_STEP_SUMMARY
+
+          # File size analysis
+          large_files=$(find _book -size +1M)
+          if [ -n "$large_files" ]; then
+            echo "- **⚠️ Large files:** Some files > 1MB detected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **✅ File sizes:** All files optimized" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 🎯 Performance Check
+        run: |
+          # Check total size
+          total_size=$(du -sh _book | cut -f1)
+          echo "Total documentation size: $total_size"
+
+          # Warn if too large
+          size_bytes=$(du -sb _book | cut -f1)
+          if [ "$size_bytes" -gt 52428800 ]; then  # 50MB
+            echo "::warning::Documentation size ($total_size) is quite large. Consider optimizing images or splitting content."
+          fi
